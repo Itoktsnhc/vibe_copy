@@ -4,7 +4,7 @@
         Title="VibeCopy — 多卡一键归档"
         Width="1100" Height="720" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="12"
+        FontFamily="Microsoft YaHei UI,Segoe UI" FontSize="12"
         Background="#F5F7FA"
         Icon="/icon.ico">
     <Window.Styles>
@@ -162,7 +162,7 @@
                 <TextBox Grid.Row="1" x:Name="TbLog" Classes="log" IsReadOnly="True"
                          Height="NaN" MinHeight="0"
                          Background="#181C22" Foreground="#DCE2EB"
-                         FontFamily="Consolas" FontSize="12"
+                         FontFamily="Cascadia Mono,Consolas,Microsoft YaHei UI" FontSize="12"
                          BorderThickness="0" Padding="6"
                          AcceptsReturn="True" TextWrapping="NoWrap"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
