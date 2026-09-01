@@ -33,6 +33,26 @@ public partial class MainWindow : Window
         CbAutoEject.IsChecked = cfg.AutoEject;
         DgDrives.ItemsSource = drives;
         Opened += (_, _) => RefreshDrives();
+
+        TbTarget.TextChanged += (_, _) => SaveCfg();
+        TbExts.TextChanged += (_, _) => SaveCfg();
+        TbDirs.TextChanged += (_, _) => SaveCfg();
+        CbTime.SelectionChanged += (_, _) => SaveCfg();
+        CbConflict.SelectionChanged += (_, _) => SaveCfg();
+        CbVerify.IsCheckedChanged += (_, _) => SaveCfg();
+        CbAutoEject.IsCheckedChanged += (_, _) => SaveCfg();
+    }
+
+    void SaveCfg()
+    {
+        cfg.Target = TbTarget.Text ?? "";
+        cfg.Exts = TbExts.Text ?? "";
+        cfg.ScanDirs = TbDirs.Text ?? "";
+        cfg.TimeField = (string?)CbTime.SelectedItem ?? cfg.TimeField;
+        cfg.Conflict = (string?)CbConflict.SelectedItem ?? cfg.Conflict;
+        cfg.Verify = CbVerify.IsChecked == true;
+        cfg.AutoEject = CbAutoEject.IsChecked == true;
+        try { cfg.Save(); } catch { }
     }
 
     async void BtnBrowse_Click(object? sender, RoutedEventArgs e)
@@ -89,14 +109,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(target)) { await MessageAsync("请设置目标目录"); return; }
         Directory.CreateDirectory(target);
 
-        cfg.Target = target;
-        cfg.Exts = TbExts.Text ?? "";
-        cfg.ScanDirs = TbDirs.Text ?? "";
-        cfg.TimeField = (string)CbTime.SelectedItem!;
-        cfg.Conflict = (string)CbConflict.SelectedItem!;
-        cfg.Verify = CbVerify.IsChecked == true;
-        cfg.AutoEject = CbAutoEject.IsChecked == true;
-        cfg.Save();
+        SaveCfg();
 
         var exts = (TbExts.Text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => x.StartsWith('.') ? x.ToLowerInvariant() : "." + x.ToLowerInvariant())

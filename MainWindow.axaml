@@ -28,6 +28,8 @@
             <Setter Property="BorderBrush" Value="#AAB4C3"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.primary">
             <Setter Property="Background" Value="#007ACC"/>
