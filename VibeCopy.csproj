@@ -2,13 +2,12 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>VibeCopy</RootNamespace>
     <AssemblyName>VibeCopy</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <ApplicationDefaultFont>Segoe UI, 9.75pt</ApplicationDefaultFont>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>

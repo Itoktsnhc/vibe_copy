@@ -4,20 +4,23 @@ Windows GUI 工具：相机/读卡器插入后，把多个可移动盘的照片/
 
 ## 技术栈
 
-- **.NET 8 + WinForms**（原生 Windows GUI，无第三方依赖）
+- **.NET 8 + WPF**（原生 Windows GUI，无第三方依赖）
 - 语言 C# 12
 - 弹出走 `Shell.Application` COM 的 `Eject` verb（对 U 盘/SD 卡/读卡器足够）
 - 复制走 `FileStream` 分块 + `.part` 临时名 + rename
+- 布局全靠 XAML `Grid`/`StackPanel`，别再手算像素
 
 ## 目录结构
 
 ```
-VibeCopy.csproj   # SDK 风格工程
-app.manifest      # PerMonitorV2 DPI
-Program.cs        # 全部代码：Config / Shell / Copier / MainForm
+VibeCopy.csproj      # SDK 风格工程，UseWPF=true
+app.manifest         # PerMonitor DPI
+App.xaml(.cs)        # 入口
+MainWindow.xaml(.cs) # 全部 UI + 事件
+Core.cs              # Config / Shell / Copier / DriveRow
 ```
 
-单文件，别拆。加东西之前先想想是不是真需要（YAGNI）。
+UI 和 Core 两块，别再拆。加东西之前先想想是不是真需要（YAGNI）。
 
 ## 开发
 
@@ -32,7 +35,7 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 # 产物：bin/Release/net8.0-windows/win-x64/publish/VibeCopy.exe
 ```
 
-配置文件：`%APPDATA%\VibeCopy\config.json`（首次运行自动生成）。
+配置文件和日志放 exe 同目录：`vibecopy.config.json` / `vibecopy.log`（首次运行自动生成）。
 
 ## 设计约定
 
