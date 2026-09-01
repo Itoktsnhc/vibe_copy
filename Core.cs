@@ -23,26 +23,35 @@ public class Config
 
     public static Config Load()
     {
-        try { return JsonSerializer.Deserialize<Config>(File.ReadAllText(Path_)) ?? new(); }
+        try { return JsonSerializer.Deserialize(File.ReadAllText(Path_), CfgCtx.Default.Config) ?? new(); }
         catch { return new(); }
     }
     public void Save() => File.WriteAllText(Path_,
-        JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+        JsonSerializer.Serialize(this, CfgCtx.Default.Config));
 }
+
+[System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = true)]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Config))]
+internal partial class CfgCtx : System.Text.Json.Serialization.JsonSerializerContext { }
 
 public static class Shell
 {
+    static object? Call(object o, string method, params object?[] args) =>
+        o.GetType().InvokeMember(method,
+            System.Reflection.BindingFlags.InvokeMethod, null, o, args);
+
     public static (bool ok, string msg) Eject(string driveLetter)
     {
         try
         {
-            var t = Type.GetTypeFromProgID("Shell.Application")
-                    ?? throw new InvalidOperationException("Shell.Application unavailable");
-            dynamic shell = Activator.CreateInstance(t)!;
-            var ns = shell.Namespace(17);
-            var item = ns?.ParseName(driveLetter.TrimEnd('\\'));
+            var t = Type.GetTypeFromProgID("Shell.Application");
+            if (t == null) return (false, "Shell.Application unavailable");
+            var shell = Activator.CreateInstance(t)!;
+            var ns = Call(shell, "Namespace", 17);
+            if (ns == null) return (false, "namespace null");
+            var item = Call(ns, "ParseName", driveLetter.TrimEnd('\\'));
             if (item == null) return (false, "not found");
-            item.InvokeVerb("Eject");
+            Call(item, "InvokeVerb", "Eject");
             return (true, "ok");
         }
         catch (Exception e) { return (false, e.Message); }

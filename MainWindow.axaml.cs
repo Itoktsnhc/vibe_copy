@@ -6,8 +6,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using Microsoft.Win32;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace VibeCopy;
 
@@ -30,18 +32,28 @@ public partial class MainWindow : Window
         CbVerify.IsChecked = cfg.Verify;
         CbAutoEject.IsChecked = cfg.AutoEject;
         DgDrives.ItemsSource = drives;
-        Loaded += (_, _) => RefreshDrives();
+        Opened += (_, _) => RefreshDrives();
     }
 
-    void BtnBrowse_Click(object sender, RoutedEventArgs e)
+    async void BtnBrowse_Click(object? sender, RoutedEventArgs e)
     {
-        var d = new OpenFolderDialog { InitialDirectory = TbTarget.Text };
-        if (d.ShowDialog() == true) TbTarget.Text = d.FolderName;
+        var top = GetTopLevel(this);
+        if (top is null) return;
+        var res = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "选择目标目录",
+            AllowMultiple = false,
+        });
+        if (res.Count > 0)
+        {
+            var p = res[0].TryGetLocalPath();
+            if (!string.IsNullOrEmpty(p)) TbTarget.Text = p;
+        }
     }
 
-    void BtnRefresh_Click(object sender, RoutedEventArgs e) => RefreshDrives();
+    void BtnRefresh_Click(object? sender, RoutedEventArgs e) => RefreshDrives();
 
-    void BtnEject_Click(object sender, RoutedEventArgs e)
+    void BtnEject_Click(object? sender, RoutedEventArgs e)
     {
         foreach (var d in drives.Where(x => x.Checked).Select(x => x.Name).ToList())
         {
@@ -51,7 +63,7 @@ public partial class MainWindow : Window
         RefreshDrives();
     }
 
-    void BtnCancel_Click(object sender, RoutedEventArgs e) => cts?.Cancel();
+    void BtnCancel_Click(object? sender, RoutedEventArgs e) => cts?.Cancel();
 
     void RefreshDrives()
     {
@@ -61,32 +73,35 @@ public partial class MainWindow : Window
             string label = "", fs = ""; long total = 0, free = 0;
             try { if (d.IsReady) { label = d.VolumeLabel; fs = d.DriveFormat; total = d.TotalSize; free = d.AvailableFreeSpace; } }
             catch { }
-            drives.Add(new DriveRow {
+            drives.Add(new DriveRow
+            {
                 Checked = true, Name = d.Name, Label = label,
                 Total = Copier.Sz(total), Free = Copier.Sz(free), Fs = fs
             });
         }
     }
 
-    async void BtnStart_Click(object sender, RoutedEventArgs e)
+    async void BtnStart_Click(object? sender, RoutedEventArgs e)
     {
         var picked = drives.Where(x => x.Checked).Select(x => x.Name).ToList();
-        if (picked.Count == 0) { MessageBox.Show("请勾选至少一个盘"); return; }
-        var target = TbTarget.Text.Trim();
-        if (string.IsNullOrEmpty(target)) { MessageBox.Show("请设置目标目录"); return; }
+        if (picked.Count == 0) { await MessageAsync("请勾选至少一个盘"); return; }
+        var target = (TbTarget.Text ?? "").Trim();
+        if (string.IsNullOrEmpty(target)) { await MessageAsync("请设置目标目录"); return; }
         Directory.CreateDirectory(target);
 
-        cfg.Target = target; cfg.Exts = TbExts.Text; cfg.ScanDirs = TbDirs.Text;
+        cfg.Target = target;
+        cfg.Exts = TbExts.Text ?? "";
+        cfg.ScanDirs = TbDirs.Text ?? "";
         cfg.TimeField = (string)CbTime.SelectedItem!;
         cfg.Conflict = (string)CbConflict.SelectedItem!;
         cfg.Verify = CbVerify.IsChecked == true;
         cfg.AutoEject = CbAutoEject.IsChecked == true;
         cfg.Save();
 
-        var exts = TbExts.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var exts = (TbExts.Text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => x.StartsWith('.') ? x.ToLowerInvariant() : "." + x.ToLowerInvariant())
             .ToHashSet();
-        var sdirs = TbDirs.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToArray();
+        var sdirs = (TbDirs.Text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToArray();
         bool useCreation = cfg.TimeField == "creation";
 
         BtnStart.IsEnabled = false; BtnCancel.IsEnabled = true;
@@ -165,7 +180,7 @@ public partial class MainWindow : Window
             {
                 long vtotal = toVerify.Sum(x => x.size);
                 Log($"开始校验 {toVerify.Count} 个文件，共 {Copier.Sz(vtotal)}");
-                Dispatcher.Invoke(() => { Pb.Maximum = Math.Max(1, vtotal); Pb.Value = 0; });
+                await Dispatcher.UIThread.InvokeAsync(() => { Pb.Maximum = Math.Max(1, vtotal); Pb.Value = 0; });
                 long vdone = 0; int vok = 0, vbad = 0;
                 var vsw = Stopwatch.StartNew();
                 await Task.Run(() =>
@@ -209,7 +224,7 @@ public partial class MainWindow : Window
 
     void Report(long done, long total, double? speed, string? name)
     {
-        Dispatcher.BeginInvoke(() =>
+        Dispatcher.UIThread.Post(() =>
         {
             Pb.Value = done;
             var pct = 100.0 * done / Math.Max(1, total);
@@ -225,10 +240,33 @@ public partial class MainWindow : Window
     {
         var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {s}";
         try { File.AppendAllText(Config.LogPath, line + Environment.NewLine); } catch { }
-        Dispatcher.BeginInvoke(() =>
+        Dispatcher.UIThread.Post(() =>
         {
-            TbLog.AppendText(line + Environment.NewLine);
-            TbLog.ScrollToEnd();
+            TbLog.Text = (TbLog.Text ?? "") + line + Environment.NewLine;
+            TbLog.CaretIndex = TbLog.Text?.Length ?? 0;
         });
+    }
+
+    async Task MessageAsync(string s)
+    {
+        var w = new Window
+        {
+            Title = "提示", Width = 320, Height = 130,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false, ShowInTaskbar = false,
+        };
+        var ok = new Button { Content = "确定", Width = 72, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+        ok.Click += (_, _) => w.Close();
+        w.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(16),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock { Text = s, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                ok,
+            }
+        };
+        await w.ShowDialog(this);
     }
 }

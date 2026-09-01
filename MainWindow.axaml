@@ -1,0 +1,173 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VibeCopy.MainWindow"
+        Title="VibeCopy — 多卡一键归档"
+        Width="1100" Height="720" MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="12"
+        Background="#F5F7FA"
+        Icon="/icon.ico">
+    <Window.Styles>
+        <Style Selector="TextBox">
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Background" Value="#E8ECF2"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Background" Value="#ECF0F6"/>
+            <Setter Property="BorderBrush" Value="#AAB4C3"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#007ACC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#007ACC"/>
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="#78808C"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E0E4EB"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style Selector="ProgressBar">
+            <Setter Property="MinHeight" Value="22"/>
+        </Style>
+        <Style Selector="ProgressBar /template/ Border#PART_Indicator">
+            <Setter Property="MinHeight" Value="22"/>
+        </Style>
+        <Style Selector="ProgressBar /template/ Border#PART_ContainerRoot">
+            <Setter Property="MinHeight" Value="22"/>
+        </Style>
+        <Style Selector="TextBox.log /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#181C22"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBox.log:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#181C22"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBox.log:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#181C22"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#1E222A"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="10" RowDefinitions="Auto,Auto,2*,3*">
+
+        <!-- 配置 -->
+        <Border Grid.Row="0" Classes="card">
+            <StackPanel>
+                <TextBlock Text="归档设置" Classes="title"/>
+                <Grid ColumnDefinitions="96,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" Text="目标目录" Margin="0,2"/>
+                    <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TbTarget" Margin="0,2,6,2"/>
+                    <Button    Grid.Row="0" Grid.Column="2" Content="浏览…" Width="72" Margin="0,2" Click="BtnBrowse_Click"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" Text="扩展名" Margin="0,2"/>
+                    <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="TbExts" Margin="0,2"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" Text="扫描子目录" Margin="0,2"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="TbDirs" Margin="0,2"
+                               ToolTip.Tip="留空=全盘扫描"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="muted" Text="子文件夹规则" Margin="0,2"/>
+                    <Grid      Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,2"
+                               ColumnDefinitions="*,10,Auto,6,*">
+                        <ComboBox  Grid.Column="0" x:Name="CbTime" HorizontalAlignment="Stretch"/>
+                        <TextBlock Grid.Column="2" Classes="muted" Text="同名冲突"/>
+                        <ComboBox  Grid.Column="4" x:Name="CbConflict" HorizontalAlignment="Stretch"/>
+                    </Grid>
+
+                    <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
+                        <CheckBox x:Name="CbVerify" Content="复制后校验 (SHA1)" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                        <CheckBox x:Name="CbAutoEject" Content="完成后自动弹出" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 传输 -->
+        <Border Grid.Row="1" Classes="card">
+            <Grid ColumnDefinitions="Auto,8,Auto,12,*" RowDefinitions="Auto,Auto">
+                <Button Grid.Row="0" Grid.Column="0" Classes="primary" Content="▶ 开始复制" x:Name="BtnStart" Click="BtnStart_Click"/>
+                <Button Grid.Row="0" Grid.Column="2" Content="■ 取消" x:Name="BtnCancel" IsEnabled="False" Click="BtnCancel_Click"/>
+                <Grid Grid.Row="0" Grid.Column="4" Height="22">
+                    <ProgressBar x:Name="Pb" Minimum="0" Maximum="1" Value="0"
+                                 MinHeight="22" Height="22"
+                                 Background="#E8ECF2" BorderBrush="#E0E4EB" Foreground="#007ACC"/>
+                    <TextBlock x:Name="LbProgress" Text="0.0%  就绪"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                </Grid>
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" x:Name="LbStatus"
+                           Text="就绪" Foreground="#78808C" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- 盘 -->
+        <Border Grid.Row="2" Classes="card">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" Margin="0,0,0,4">
+                    <TextBlock Text="可移动盘" Classes="title" Margin="0"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="⟳ 刷新" Margin="0,0,6,0" Click="BtnRefresh_Click"/>
+                        <Button Content="⏏ 弹出勾选盘" Click="BtnEject_Click"/>
+                    </StackPanel>
+                </Grid>
+                <DataGrid Grid.Row="1" x:Name="DgDrives"
+                          AutoGenerateColumns="False" HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          CanUserReorderColumns="False" CanUserResizeColumns="True"
+                          IsReadOnly="False"
+                          Background="White" BorderThickness="0"
+                          RowHeight="24" FontSize="12">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="" Binding="{Binding Checked}" Width="32"/>
+                        <DataGridTextColumn Header="盘符"     Binding="{Binding Name}"  Width="70"  IsReadOnly="True"/>
+                        <DataGridTextColumn Header="卷标"     Binding="{Binding Label}" Width="*"   IsReadOnly="True"/>
+                        <DataGridTextColumn Header="总容量"   Binding="{Binding Total}" Width="90"  IsReadOnly="True"/>
+                        <DataGridTextColumn Header="可用"     Binding="{Binding Free}"  Width="90"  IsReadOnly="True"/>
+                        <DataGridTextColumn Header="文件系统" Binding="{Binding Fs}"    Width="100" IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- 日志 -->
+        <Border Grid.Row="3" Classes="card" Margin="0">
+            <Grid RowDefinitions="Auto,*">
+                <TextBlock Text="日志" Classes="title"/>
+                <TextBox Grid.Row="1" x:Name="TbLog" Classes="log" IsReadOnly="True"
+                         Height="NaN" MinHeight="0"
+                         Background="#181C22" Foreground="#DCE2EB"
+                         FontFamily="Consolas" FontSize="12"
+                         BorderThickness="0" Padding="6"
+                         AcceptsReturn="True" TextWrapping="NoWrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

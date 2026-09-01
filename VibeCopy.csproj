@@ -1,13 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>VibeCopy</RootNamespace>
     <AssemblyName>VibeCopy</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>icon.ico</ApplicationIcon>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="icon.ico"/>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.2"/>
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.2"/>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.2"/>
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.2.2"/>
+  </ItemGroup>
 </Project>
