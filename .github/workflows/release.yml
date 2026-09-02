@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -35,31 +39,38 @@ jobs:
 
       - name: Scan on VirusTotal
         id: vt
-        if: startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
         uses: crazy-max/ghaction-virustotal@v4
         with:
           vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
           files: publish/VibeCopy.exe
 
       - name: Update badge + README
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.vt.outcome == 'success'
         shell: pwsh
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower()
-          # VT needs a few seconds after upload before the file report is queryable
           $stats = $null
-          for ($i=0; $i -lt 10; $i++) {
+          for ($i=0; $i -lt 20; $i++) {
             try {
               $r = Invoke-RestMethod -Headers @{ 'x-apikey' = $env:VT_API_KEY } `
                     -Uri "https://www.virustotal.com/api/v3/files/$sha"
               $stats = $r.data.attributes.last_analysis_stats
-              if ($stats) { break }
-            } catch { Start-Sleep 15 }
+              if ($stats -and ($stats.malicious + $stats.undetected + $stats.harmless + $stats.suspicious) -gt 0) { break }
+            } catch {
+              if ($_.Exception.Response.StatusCode.value__ -eq 429) {
+                Write-Host "VT 429, sleeping 30s"
+                Start-Sleep 30; continue
+              }
+              Start-Sleep 20
+            }
+            Start-Sleep 20
           }
-          $mal = if ($stats) { [int]$stats.malicious } else { 0 }
-          $total = if ($stats) { [int]($stats.malicious + $stats.undetected + $stats.suspicious + $stats.harmless) } else { 0 }
+          if (-not $stats) { Write-Host "VT stats unavailable, skip badge update"; exit 0 }
+          $mal = [int]$stats.malicious
+          $total = [int]($stats.malicious + $stats.undetected + $stats.suspicious + $stats.harmless)
           $color = if ($mal -eq 0) { 'success' } elseif ($mal -le 2) { 'yellow' } else { 'critical' }
           $badge = @{ schemaVersion = 1; label = 'VirusTotal'; message = "$mal/$total"; color = $color } | ConvertTo-Json -Compress
           New-Item -ItemType Directory -Force .github | Out-Null
@@ -79,26 +90,27 @@ jobs:
         id: badge
 
       - name: Commit badge + README
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.badge.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git checkout main
           git add .github/vt-badge.json README.md
-          git diff --cached --quiet || git commit -m "chore: update VT scan badge for ${{ github.ref_name }} [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update VT scan badge [skip ci]"
           git push origin main
 
       - name: Compose release notes
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
-          @"
-          ## VibeCopy ${{ github.ref_name }}
-
-          - **SHA256**: ``${{ steps.badge.outputs.sha }}``
-          - **VirusTotal**: ${{ steps.badge.outputs.vt }} (${{ steps.badge.outputs.mal }}/${{ steps.badge.outputs.total }} detections)
-          "@ | Out-File release-notes.md -Encoding utf8
+          $sha = "${{ steps.badge.outputs.sha }}"
+          if (-not $sha) { $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower() }
+          $vt = "${{ steps.badge.outputs.vt }}"
+          $ratio = "${{ steps.badge.outputs.mal }}/${{ steps.badge.outputs.total }}"
+          $body = "## VibeCopy ${{ github.ref_name }}`n`n- **SHA256**: ``$sha```n"
+          if ($vt) { $body += "- **VirusTotal**: $vt ($ratio detections)`n" }
+          [IO.File]::WriteAllText("$PWD/release-notes.md", $body)
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
