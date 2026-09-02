@@ -1,6 +1,6 @@
 # VibeCopy
 
-[![VirusTotal](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Itoktsnhc/vibe_copy/main/.github/vt-badge.json)](https://www.virustotal.com/gui/file/0000000000000000000000000000000000000000000000000000000000000000)
+[![Defender](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Itoktsnhc/vibe_copy/main/.github/defender-badge.json)](https://github.com/Itoktsnhc/vibe_copy/actions/workflows/release.yml)
 
 Windows GUI 工具：相机 / 读卡器插入后，把多个可移动盘的照片、视频一次性归档到目标目录下的 `yyyy-MM-dd` 子文件夹，完成后一键弹出。
 
@@ -34,7 +34,7 @@ Windows GUI 工具：相机 / 读卡器插入后，把多个可移动盘的照�
 
 ## 安全性
 
-每个 Release 的 `VibeCopy.exe` 由 GitHub Actions 在 `windows-latest` 上原地构建，构建完成后自动上传到 [VirusTotal](https://www.virustotal.com/) 扫描。**SHA256 与 VirusTotal 分析链接**记录在每个 Release 的发布说明里，可自行核对。
+每次 push 都在 GitHub Actions 的 `windows-latest` runner 上原地构建，并用 **Windows Defender** 实时签名库扫描产物；扫出威胁工作流直接失败。构建产物 `VibeCopy.exe` 的 SHA256 记录在每个 Release 的说明里，可自行核对。
 
 源码开放，可自行 `dotnet publish` 复现产物。
 

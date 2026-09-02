@@ -37,79 +37,49 @@ jobs:
           name: VibeCopy
           path: publish/VibeCopy.exe
 
-      - name: Scan on VirusTotal
-        id: vt
-        continue-on-error: true
-        uses: crazy-max/ghaction-virustotal@v4
-        with:
-          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          files: publish/VibeCopy.exe
-
-      - name: Update badge + README
-        if: steps.vt.outcome == 'success'
+      - name: Scan with Windows Defender
+        id: scan
         shell: pwsh
-        env:
-          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
-          $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower()
-          $stats = $null
-          for ($i=0; $i -lt 20; $i++) {
-            try {
-              $r = Invoke-RestMethod -Headers @{ 'x-apikey' = $env:VT_API_KEY } `
-                    -Uri "https://www.virustotal.com/api/v3/files/$sha"
-              $stats = $r.data.attributes.last_analysis_stats
-              if ($stats -and ($stats.malicious + $stats.undetected + $stats.harmless + $stats.suspicious) -gt 0) { break }
-            } catch {
-              if ($_.Exception.Response.StatusCode.value__ -eq 429) {
-                Write-Host "VT 429, sleeping 30s"
-                Start-Sleep 30; continue
-              }
-              Start-Sleep 20
-            }
-            Start-Sleep 20
-          }
-          if (-not $stats) { Write-Host "VT stats unavailable, skip badge update"; exit 0 }
-          $mal = [int]$stats.malicious
-          $total = [int]($stats.malicious + $stats.undetected + $stats.suspicious + $stats.harmless)
-          $color = if ($mal -eq 0) { 'success' } elseif ($mal -le 2) { 'yellow' } else { 'critical' }
-          $badge = @{ schemaVersion = 1; label = 'VirusTotal'; message = "$mal/$total"; color = $color } | ConvertTo-Json -Compress
+          $exe = (Resolve-Path publish/VibeCopy.exe).Path
+          Update-MpSignature -ErrorAction SilentlyContinue
+          $sig = Get-MpComputerStatus
+          $ver = "$($sig.AntivirusSignatureVersion)"
+          Start-MpScan -ScanType CustomScan -ScanPath $exe
+          $threats = Get-MpThreatDetection -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Resources -like "*$exe*" }
+          $clean = -not $threats
+          $msg = if ($clean) { 'clean' } else { 'threat detected' }
+          $color = if ($clean) { 'success' } else { 'critical' }
+          $badge = @{ schemaVersion = 1; label = "Defender $ver"; message = $msg; color = $color } | ConvertTo-Json -Compress
           New-Item -ItemType Directory -Force .github | Out-Null
-          [IO.File]::WriteAllText("$PWD/.github/vt-badge.json", $badge)
+          [IO.File]::WriteAllText("$PWD/.github/defender-badge.json", $badge)
+          "clean=$clean" | Out-File $env:GITHUB_OUTPUT -Append
+          "sigver=$ver"  | Out-File $env:GITHUB_OUTPUT -Append
+          if (-not $clean) { $threats | Format-List *; throw "Defender flagged the binary" }
 
-          $vtLink = "https://www.virustotal.com/gui/file/$sha"
-          $readme = Get-Content README.md -Raw
-          $readme = [regex]::Replace($readme,
-            'https://www\.virustotal\.com/gui/file/[0-9a-f]{64}',
-            $vtLink)
-          [IO.File]::WriteAllText("$PWD/README.md", $readme)
-
-          "sha=$sha"     | Out-File $env:GITHUB_OUTPUT -Append
-          "vt=$vtLink"   | Out-File $env:GITHUB_OUTPUT -Append
-          "mal=$mal"     | Out-File $env:GITHUB_OUTPUT -Append
-          "total=$total" | Out-File $env:GITHUB_OUTPUT -Append
-        id: badge
-
-      - name: Commit badge + README
-        if: steps.badge.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Commit badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
           git checkout main
-          git add .github/vt-badge.json README.md
-          git diff --cached --quiet || git commit -m "chore: update VT scan badge [skip ci]"
+          git add .github/defender-badge.json
+          git diff --cached --quiet || git commit -m "chore: update Defender scan badge [skip ci]"
           git push origin main
 
       - name: Compose release notes
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
-          $sha = "${{ steps.badge.outputs.sha }}"
-          if (-not $sha) { $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower() }
-          $vt = "${{ steps.badge.outputs.vt }}"
-          $ratio = "${{ steps.badge.outputs.mal }}/${{ steps.badge.outputs.total }}"
-          $body = "## VibeCopy ${{ github.ref_name }}`n`n- **SHA256**: ``$sha```n"
-          if ($vt) { $body += "- **VirusTotal**: $vt ($ratio detections)`n" }
+          $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower()
+          $body = @"
+          ## VibeCopy ${{ github.ref_name }}
+
+          - **SHA256**: ``$sha``
+          - **Windows Defender**: clean (sig ${{ steps.scan.outputs.sigver }})
+          "@
           [IO.File]::WriteAllText("$PWD/release-notes.md", $body)
 
       - name: Release
