@@ -36,22 +36,47 @@ internal partial class CfgCtx : System.Text.Json.Serialization.JsonSerializerCon
 
 public static class Shell
 {
-    static object? Call(object o, string method, params object?[] args) =>
-        o.GetType().InvokeMember(method,
-            System.Reflection.BindingFlags.InvokeMethod, null, o, args);
+    const uint GENERIC_READ = 0x80000000;
+    const uint GENERIC_WRITE = 0x40000000;
+    const uint FILE_SHARE_READ = 0x1, FILE_SHARE_WRITE = 0x2;
+    const uint OPEN_EXISTING = 3;
+    const uint FSCTL_LOCK_VOLUME = 0x00090018;
+    const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+    const uint IOCTL_STORAGE_MEDIA_REMOVAL = 0x002D4804;
+    const uint IOCTL_STORAGE_EJECT_MEDIA = 0x002D4808;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    struct PREVENT_MEDIA_REMOVAL { public byte PreventMediaRemoval; }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr sec, uint disp, uint attr, IntPtr tmpl);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code,
+        IntPtr inBuf, uint inSize, IntPtr outBuf, uint outSize, out uint bytesReturned, IntPtr overlapped);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code,
+        ref PREVENT_MEDIA_REMOVAL inBuf, uint inSize, IntPtr outBuf, uint outSize, out uint bytesReturned, IntPtr overlapped);
 
     public static (bool ok, string msg) Eject(string driveLetter)
     {
+        var letter = driveLetter.TrimEnd('\\', '/').TrimEnd(':');
+        if (letter.Length == 0) return (false, "empty");
+        var path = $@"\\.\{letter}:";
         try
         {
-            var t = Type.GetTypeFromProgID("Shell.Application");
-            if (t == null) return (false, "Shell.Application unavailable");
-            var shell = Activator.CreateInstance(t)!;
-            var ns = Call(shell, "Namespace", 17);
-            if (ns == null) return (false, "namespace null");
-            var item = Call(ns, "ParseName", driveLetter.TrimEnd('\\'));
-            if (item == null) return (false, "not found");
-            Call(item, "InvokeVerb", "Eject");
+            using var h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+            if (h.IsInvalid) return (false, $"open failed ({System.Runtime.InteropServices.Marshal.GetLastWin32Error()})");
+            if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero))
+                return (false, $"lock failed ({System.Runtime.InteropServices.Marshal.GetLastWin32Error()})");
+            if (!DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero))
+                return (false, $"dismount failed ({System.Runtime.InteropServices.Marshal.GetLastWin32Error()})");
+            var pmr = new PREVENT_MEDIA_REMOVAL { PreventMediaRemoval = 0 };
+            DeviceIoControl(h, IOCTL_STORAGE_MEDIA_REMOVAL, ref pmr, (uint)System.Runtime.InteropServices.Marshal.SizeOf(pmr), IntPtr.Zero, 0, out _, IntPtr.Zero);
+            if (!DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero))
+                return (false, $"eject failed ({System.Runtime.InteropServices.Marshal.GetLastWin32Error()})");
             return (true, "ok");
         }
         catch (Exception e) { return (false, e.Message); }

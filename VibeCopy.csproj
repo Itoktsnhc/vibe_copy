@@ -8,9 +8,7 @@
     <AssemblyName>VibeCopy</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-    <NoWarn>IL2026;IL2070;IL2072;IL2075;IL2104</NoWarn>
-    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="icon.ico"/>
@@ -19,6 +17,5 @@
     <PackageReference Include="Avalonia" Version="11.2.2"/>
     <PackageReference Include="Avalonia.Desktop" Version="11.2.2"/>
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.2"/>
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.2.2"/>
   </ItemGroup>
 </Project>

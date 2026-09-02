@@ -1,6 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:VibeCopy"
         x:Class="VibeCopy.MainWindow"
+        x:DataType="vm:MainWindow"
         Title="VibeCopy — 多卡一键归档"
         Width="1100" Height="720" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
@@ -130,7 +132,7 @@
 
         <!-- 盘 -->
         <Border Grid.Row="2" Classes="card">
-            <Grid RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,Auto,*">
                 <Grid Grid.Row="0" Margin="0,0,0,4">
                     <TextBlock Text="可移动盘" Classes="title" Margin="0"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -138,22 +140,29 @@
                         <Button Content="⏏ 弹出勾选盘" Click="BtnEject_Click"/>
                     </StackPanel>
                 </Grid>
-                <DataGrid Grid.Row="1" x:Name="DgDrives"
-                          AutoGenerateColumns="False" HeadersVisibility="Column"
-                          GridLinesVisibility="None"
-                          CanUserReorderColumns="False" CanUserResizeColumns="True"
-                          IsReadOnly="False"
-                          Background="White" BorderThickness="0"
-                          RowHeight="24" FontSize="12">
-                    <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="" Binding="{Binding Checked}" Width="32"/>
-                        <DataGridTextColumn Header="盘符"     Binding="{Binding Name}"  Width="70"  IsReadOnly="True"/>
-                        <DataGridTextColumn Header="卷标"     Binding="{Binding Label}" Width="*"   IsReadOnly="True"/>
-                        <DataGridTextColumn Header="总容量"   Binding="{Binding Total}" Width="90"  IsReadOnly="True"/>
-                        <DataGridTextColumn Header="可用"     Binding="{Binding Free}"  Width="90"  IsReadOnly="True"/>
-                        <DataGridTextColumn Header="文件系统" Binding="{Binding Fs}"    Width="100" IsReadOnly="True"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid Grid.Row="1" ColumnDefinitions="36,80,*,100,100,110" Margin="0,0,0,2">
+                    <TextBlock Grid.Column="1" Text="盘符"    Classes="muted"/>
+                    <TextBlock Grid.Column="2" Text="卷标"    Classes="muted"/>
+                    <TextBlock Grid.Column="3" Text="总容量"  Classes="muted"/>
+                    <TextBlock Grid.Column="4" Text="可用"    Classes="muted"/>
+                    <TextBlock Grid.Column="5" Text="文件系统" Classes="muted"/>
+                </Grid>
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="DgDrives">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DriveRow">
+                                <Grid ColumnDefinitions="36,80,*,100,100,110" Height="24">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding Checked, Mode=TwoWay}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}"  VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding Total}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding Free}"  VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="5" Text="{Binding Fs}"    VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Grid>
         </Border>
 
