@@ -14,6 +14,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -29,8 +31,77 @@ jobs:
         with:
           name: VibeCopy
           path: publish/VibeCopy.exe
+
+      - name: Scan on VirusTotal
+        id: vt
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          files: publish/VibeCopy.exe
+
+      - name: Update badge + README
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower()
+          # VT needs a few seconds after upload before the file report is queryable
+          $stats = $null
+          for ($i=0; $i -lt 10; $i++) {
+            try {
+              $r = Invoke-RestMethod -Headers @{ 'x-apikey' = $env:VT_API_KEY } `
+                    -Uri "https://www.virustotal.com/api/v3/files/$sha"
+              $stats = $r.data.attributes.last_analysis_stats
+              if ($stats) { break }
+            } catch { Start-Sleep 15 }
+          }
+          $mal = if ($stats) { [int]$stats.malicious } else { 0 }
+          $total = if ($stats) { [int]($stats.malicious + $stats.undetected + $stats.suspicious + $stats.harmless) } else { 0 }
+          $color = if ($mal -eq 0) { 'success' } elseif ($mal -le 2) { 'yellow' } else { 'critical' }
+          $badge = @{ schemaVersion = 1; label = 'VirusTotal'; message = "$mal/$total"; color = $color } | ConvertTo-Json -Compress
+          New-Item -ItemType Directory -Force .github | Out-Null
+          $badge | Out-File -Encoding utf8 -NoNewline .github/vt-badge.json
+
+          $vtLink = "https://www.virustotal.com/gui/file/$sha"
+          $readme = Get-Content README.md -Raw
+          $readme = [regex]::Replace($readme,
+            'https://www\.virustotal\.com/gui/file/[0-9a-f]{64}',
+            $vtLink)
+          Set-Content -NoNewline README.md $readme
+
+          "sha=$sha"     | Out-File $env:GITHUB_OUTPUT -Append
+          "vt=$vtLink"   | Out-File $env:GITHUB_OUTPUT -Append
+          "mal=$mal"     | Out-File $env:GITHUB_OUTPUT -Append
+          "total=$total" | Out-File $env:GITHUB_OUTPUT -Append
+        id: badge
+
+      - name: Commit badge + README
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git checkout main
+          git add .github/vt-badge.json README.md
+          git diff --cached --quiet || git commit -m "chore: update VT scan badge for ${{ github.ref_name }} [skip ci]"
+          git push origin main
+
+      - name: Compose release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          @"
+          ## VibeCopy ${{ github.ref_name }}
+
+          - **SHA256**: ``${{ steps.badge.outputs.sha }}``
+          - **VirusTotal**: ${{ steps.badge.outputs.vt }} (${{ steps.badge.outputs.mal }}/${{ steps.badge.outputs.total }} detections)
+          "@ | Out-File release-notes.md -Encoding utf8
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: publish/VibeCopy.exe
+          body_path: release-notes.md
