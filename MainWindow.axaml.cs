@@ -75,12 +75,17 @@ public partial class MainWindow : Window
 
     void BtnEject_Click(object? sender, RoutedEventArgs e)
     {
-        foreach (var d in drives.Where(x => x.Checked).Select(x => x.Name).ToList())
+        BtnEject.IsEnabled = false;
+        try
         {
-            var (ok, msg) = Shell.Eject(d);
-            Log($"弹出 {d}: {(ok ? "OK" : msg)}");
+            foreach (var d in drives.Where(x => x.Checked).Select(x => x.Name).ToList())
+            {
+                var (ok, msg) = Shell.Eject(d);
+                Log($"弹出 {d}: {(ok ? "OK" : msg)}");
+            }
+            RefreshDrives();
         }
-        RefreshDrives();
+        finally { BtnEject.IsEnabled = true; }
     }
 
     void BtnCancel_Click(object? sender, RoutedEventArgs e) => cts?.Cancel();
@@ -124,6 +129,15 @@ public partial class MainWindow : Window
         try
         {
             Log($"扫描 {picked.Count} 个盘…");
+            if (sdirs.Length > 0)
+            {
+                foreach (var d in picked)
+                {
+                    var missing = sdirs.Where(s => !Directory.Exists(Path.Combine(d, s))).ToList();
+                    if (missing.Count == sdirs.Length)
+                        Log($"提示 {d} 未找到任何配置的扫描子目录（{string.Join(",", sdirs)}），此盘将跳过。留空可全盘扫。");
+                }
+            }
             var files = await Task.Run(() =>
                 picked.SelectMany(d => Copier.Scan(d, exts, sdirs))
                       .OrderBy(f => useCreation ? f.Created : f.Modified)
@@ -178,6 +192,10 @@ public partial class MainWindow : Window
                         {
                             copied++;
                             if (cfg.Verify) toVerify.Add((f.Src, dst, f.Size));
+                        }
+                        else if (ct.IsCancellationRequested)
+                        {
+                            Log($"已取消 {f.Src}");
                         }
                     }
                     catch (Exception ex) { failed++; Log($"失败 {f.Src}: {ex.Message}"); }
@@ -252,10 +270,14 @@ public partial class MainWindow : Window
     void Log(string s)
     {
         var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {s}";
-        try { File.AppendAllText(Config.LogPath, line + Environment.NewLine); } catch { }
+        try { Directory.CreateDirectory(Config.LogDir); File.AppendAllText(Config.LogPath, line + Environment.NewLine); } catch { }
         Dispatcher.UIThread.Post(() =>
         {
-            TbLog.Text = (TbLog.Text ?? "") + line + Environment.NewLine;
+            const int cap = 200_000;
+            var cur = TbLog.Text ?? "";
+            var next = cur + line + Environment.NewLine;
+            if (next.Length > cap) next = next[^cap..];
+            TbLog.Text = next;
             TbLog.CaretIndex = TbLog.Text?.Length ?? 0;
         });
     }

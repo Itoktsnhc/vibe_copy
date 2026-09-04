@@ -137,7 +137,7 @@
                     <TextBlock Text="可移动盘" Classes="title" Margin="0"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="⟳ 刷新" Margin="0,0,6,0" Click="BtnRefresh_Click"/>
-                        <Button Content="⏏ 弹出勾选盘" Click="BtnEject_Click"/>
+                        <Button Content="⏏ 弹出勾选盘" x:Name="BtnEject" Click="BtnEject_Click"/>
                     </StackPanel>
                 </Grid>
                 <Grid Grid.Row="1" ColumnDefinitions="36,80,*,100,100,110" Margin="0,0,0,2">
@@ -172,6 +172,7 @@
                 <TextBlock Text="日志" Classes="title"/>
                 <TextBox Grid.Row="1" x:Name="TbLog" Classes="log" IsReadOnly="True"
                          Height="NaN" MinHeight="0"
+                         VerticalContentAlignment="Top"
                          Background="#181C22" Foreground="#DCE2EB"
                          FontFamily="Cascadia Mono,Consolas,Microsoft YaHei UI" FontSize="12"
                          BorderThickness="0" Padding="6"

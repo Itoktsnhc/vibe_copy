@@ -19,15 +19,21 @@ public class Config
     public bool AutoEject { get; set; } = true;
 
     static string Path_ => Path.Combine(AppContext.BaseDirectory, "vibecopy.config.json");
-    public static string LogPath => Path.Combine(AppContext.BaseDirectory, "vibecopy.log");
+    public static string LogDir => Path.Combine(AppContext.BaseDirectory, "logs");
+    public static string LogPath => Path.Combine(LogDir, $"vibecopy-{DateTime.Now:yyyy-MM-dd}.log");
 
     public static Config Load()
     {
         try { return JsonSerializer.Deserialize(File.ReadAllText(Path_), CfgCtx.Default.Config) ?? new(); }
         catch { return new(); }
     }
-    public void Save() => File.WriteAllText(Path_,
-        JsonSerializer.Serialize(this, CfgCtx.Default.Config));
+    public void Save()
+    {
+        var tmp = Path_ + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(this, CfgCtx.Default.Config));
+        if (File.Exists(Path_)) File.Replace(tmp, Path_, null);
+        else File.Move(tmp, Path_);
+    }
 }
 
 [System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = true)]
@@ -92,7 +98,6 @@ public static class Copier
         IEnumerable<string> roots = scanDirs.Length == 0
             ? new[] { drive }
             : scanDirs.Select(d => Path.Combine(drive, d)).Where(Directory.Exists);
-        if (!roots.Any()) roots = new[] { drive };
 
         foreach (var r in roots)
         {
@@ -132,10 +137,19 @@ public static class Copier
                 }
             }
             var srcFi = new FileInfo(src);
-            File.SetCreationTime(tmp, srcFi.CreationTime);
-            File.SetLastWriteTime(tmp, srcFi.LastWriteTime);
-            if (File.Exists(dst)) File.Delete(dst);
-            File.Move(tmp, dst);
+            try { File.SetCreationTime(tmp, srcFi.CreationTime); } catch { }
+            try { File.SetLastWriteTime(tmp, srcFi.LastWriteTime); } catch { }
+            // ponytail: retry the final rename a few times — SMB/NAS with AV briefly locks .part
+            for (int i = 0; ; i++)
+            {
+                try
+                {
+                    if (File.Exists(dst)) File.Delete(dst);
+                    File.Move(tmp, dst);
+                    break;
+                }
+                catch (IOException) when (i < 4) { Thread.Sleep(200 * (i + 1)); }
+            }
             return true;
         }
         catch { try { File.Delete(tmp); } catch { } throw; }

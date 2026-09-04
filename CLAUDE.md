@@ -4,20 +4,20 @@ Windows GUI 工具：相机/读卡器插入后，把多个可移动盘的照片/
 
 ## 技术栈
 
-- **.NET 8 + WPF**（原生 Windows GUI，无第三方依赖）
+- **.NET 8 + Avalonia 11**（跨平台 UI，实际只用 Windows；单文件 exe）
 - 语言 C# 12
-- 弹出走 `Shell.Application` COM 的 `Eject` verb（对 U 盘/SD 卡/读卡器足够）
+- 弹出走 Win32 `DeviceIoControl`：`FSCTL_LOCK_VOLUME` → `FSCTL_DISMOUNT_VOLUME` → `IOCTL_STORAGE_EJECT_MEDIA`（比 `Shell.Application` COM 更可靠，能拿到失败原因）
 - 复制走 `FileStream` 分块 + `.part` 临时名 + rename
 - 布局全靠 XAML `Grid`/`StackPanel`，别再手算像素
 
 ## 目录结构
 
 ```
-VibeCopy.csproj      # SDK 风格工程，UseWPF=true
-app.manifest         # PerMonitor DPI
-App.xaml(.cs)        # 入口
-MainWindow.xaml(.cs) # 全部 UI + 事件
-Core.cs              # Config / Shell / Copier / DriveRow
+VibeCopy.csproj       # SDK 风格工程，Avalonia PackageReference
+app.manifest          # PerMonitor DPI
+App.axaml(.cs)        # 入口
+MainWindow.axaml(.cs) # 全部 UI + 事件
+Core.cs               # Config / Shell / Copier / DriveRow
 ```
 
 UI 和 Core 两块，别再拆。加东西之前先想想是不是真需要（YAGNI）。
@@ -41,12 +41,12 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 
 - **品牌无关**：默认扩展名覆盖 Sony/Canon/Nikon/Fuji/Panasonic RAW + 常见视频；扫描目录默认 `DCIM,PRIVATE,M4ROOT,XDROOT,MISC,AVCHD,CLIP,SSP`，留空则全盘扫。加机型 = 改默认字符串，别加 if-else。
 - **日期字段**：`creation`（Windows 文件创建时间）或 `modified`（写入时间）。默认 creation。
-- **同名同大小跳过**，其余覆盖；`.part` 完成后 rename，防止半文件。
+- **同名冲突**：按配置 `skip`（存在即跳过，不比大小）/`rename`（追加 `-N`）/`overwrite`；`.part` 完成后 rename，防止半文件。
 - **弹出**：勾选盘后按钮触发，每个盘调一次 Shell verb。多盘同物理设备时 Windows 自己会合并处理。
 
 ## 不要做的事
 
-- 不要引 NuGet 包（除非确实必要，Shell COM 用 `Type.GetTypeFromProgID` + dynamic 就够）
+- 不要引 NuGet 包（除非确实必要，Win32 弹出直接 P/Invoke `DeviceIoControl`）
 - 不要拆多项目/多文件
 - 不要加"进度动画/托盘图标/更新检查"这类非核心功能
 - 不要加 EXIF 解析：文件系统时间已经够用；真要 EXIF 再说
