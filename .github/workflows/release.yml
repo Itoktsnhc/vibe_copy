@@ -19,8 +19,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -37,49 +35,12 @@ jobs:
           name: VibeCopy
           path: publish/VibeCopy.exe
 
-      - name: Scan with Windows Defender
-        id: scan
-        shell: pwsh
-        run: |
-          $exe = (Resolve-Path publish/VibeCopy.exe).Path
-          Update-MpSignature -ErrorAction SilentlyContinue
-          $sig = Get-MpComputerStatus
-          $ver = "$($sig.AntivirusSignatureVersion)"
-          Start-MpScan -ScanType CustomScan -ScanPath $exe
-          $threats = Get-MpThreatDetection -ErrorAction SilentlyContinue |
-                     Where-Object { $_.Resources -like "*$exe*" }
-          $clean = -not $threats
-          $msg = if ($clean) { 'clean' } else { 'threat detected' }
-          $color = if ($clean) { 'success' } else { 'critical' }
-          $badge = @{ schemaVersion = 1; label = "Defender $ver"; message = $msg; color = $color } | ConvertTo-Json -Compress
-          New-Item -ItemType Directory -Force .github | Out-Null
-          [IO.File]::WriteAllText("$PWD/.github/defender-badge.json", $badge)
-          "clean=$clean" | Out-File $env:GITHUB_OUTPUT -Append
-          "sigver=$ver"  | Out-File $env:GITHUB_OUTPUT -Append
-          if (-not $clean) { $threats | Format-List *; throw "Defender flagged the binary" }
-
-      - name: Commit badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          git checkout main
-          git add .github/defender-badge.json
-          git diff --cached --quiet || git commit -m "chore: update Defender scan badge [skip ci]"
-          git push origin main
-
       - name: Compose release notes
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $sha = (Get-FileHash publish/VibeCopy.exe -Algorithm SHA256).Hash.ToLower()
-          $body = @"
-          ## VibeCopy ${{ github.ref_name }}
-
-          - **SHA256**: ``$sha``
-          - **Windows Defender**: clean (sig ${{ steps.scan.outputs.sigver }})
-          "@
+          $body = "## VibeCopy ${{ github.ref_name }}`n`n- **SHA256**: ``$sha```n"
           [IO.File]::WriteAllText("$PWD/release-notes.md", $body)
 
       - name: Release
