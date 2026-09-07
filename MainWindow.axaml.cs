@@ -31,6 +31,8 @@ public partial class MainWindow : Window
         CbConflict.SelectedItem = cfg.Conflict;
         CbVerify.IsChecked = cfg.Verify;
         CbAutoEject.IsChecked = cfg.AutoEject;
+        NudConcurrency.ItemsSource = new[] { 1, 2, 3, 4, 6, 8, 12, 16 };
+        NudConcurrency.SelectedItem = ((int[])NudConcurrency.ItemsSource).Contains(cfg.Concurrency) ? cfg.Concurrency : 2;
         DgDrives.ItemsSource = drives;
         Opened += (_, _) => RefreshDrives();
 
@@ -41,6 +43,7 @@ public partial class MainWindow : Window
         CbConflict.SelectionChanged += (_, _) => SaveCfg();
         CbVerify.IsCheckedChanged += (_, _) => SaveCfg();
         CbAutoEject.IsCheckedChanged += (_, _) => SaveCfg();
+        NudConcurrency.SelectionChanged += (_, _) => SaveCfg();
     }
 
     void SaveCfg()
@@ -52,6 +55,7 @@ public partial class MainWindow : Window
         cfg.Conflict = (string?)CbConflict.SelectedItem ?? cfg.Conflict;
         cfg.Verify = CbVerify.IsChecked == true;
         cfg.AutoEject = CbAutoEject.IsChecked == true;
+        cfg.Concurrency = NudConcurrency.SelectedItem is int c ? c : 2;
         try { cfg.Save(); } catch { }
     }
 
@@ -142,24 +146,51 @@ public partial class MainWindow : Window
                 picked.SelectMany(d => Copier.Scan(d, exts, sdirs))
                       .OrderBy(f => useCreation ? f.Created : f.Modified)
                       .ToList(), ct);
-            long total = files.Sum(f => f.Size);
-            Log($"待复制 {files.Count} 个文件，共 {Copier.Sz(total)}");
-            Pb.Maximum = Math.Max(1, total); Pb.Value = 0;
-            LbProgress.Text = $"0.0%  0 / {Copier.Sz(total)}";
+            long totalBytes = files.Sum(f => f.Size);
+            int totalFiles = files.Count;
+            Log($"待复制 {totalFiles} 个文件，共 {Copier.Sz(totalBytes)}，并发 {cfg.Concurrency}");
+            SetOverall(0, totalFiles, 0, totalBytes);
+            SetCurrent(0, 1, "—");
+            TbSpeed.Text = "0 B/s";
 
-            long done = 0; int copied = 0, skipped = 0, failed = 0;
-            var toVerify = new List<(string src, string dst, long size)>();
+            long doneBytes = 0;
+            int doneFiles = 0, copied = 0, skipped = 0, failed = 0;
+            var toVerify = new System.Collections.Concurrent.ConcurrentBag<(string src, string dst, long size)>();
+            var active = new System.Collections.Concurrent.ConcurrentDictionary<int, (string name, long size, long done)>();
             var sw = Stopwatch.StartNew();
-            long lastBytes = 0; var lastTick = sw.Elapsed;
+            long lastBytes = 0; double lastSec = 0;
 
-            await Task.Run(() =>
+            using var speedTimer = new System.Threading.Timer(_ =>
             {
-                foreach (var f in files)
+                var cur = Interlocked.Read(ref doneBytes);
+                var nowSec = sw.Elapsed.TotalSeconds;
+                var dt = nowSec - lastSec;
+                if (dt <= 0) return;
+                var speed = (cur - lastBytes) / dt;
+                lastBytes = cur; lastSec = nowSec;
+                var snapshot = active.Values.ToArray();
+                Dispatcher.UIThread.Post(() =>
                 {
-                    if (ct.IsCancellationRequested) break;
+                    TbSpeed.Text = Copier.Sz(speed) + "/s";
+                    if (snapshot.Length > 0)
+                    {
+                        long cd = snapshot.Sum(x => x.done);
+                        long cs = Math.Max(1, snapshot.Sum(x => x.size));
+                        var name = snapshot.Length == 1 ? snapshot[0].name : $"{snapshot.Length} 个文件并行";
+                        SetCurrent(cd, cs, name);
+                    }
+                });
+            }, null, 250, 250);
+
+            await Parallel.ForEachAsync(files,
+                new ParallelOptions { MaxDegreeOfParallelism = cfg.Concurrency, CancellationToken = ct },
+                (f, token) =>
+                {
+                    if (token.IsCancellationRequested) return ValueTask.CompletedTask;
                     var ts = useCreation ? f.Created : f.Modified;
                     var folder = Path.Combine(target, ts.ToString("yyyy-MM-dd"));
                     var dst = Path.Combine(folder, Path.GetFileName(f.Src));
+                    int slot = System.Threading.Thread.CurrentThread.ManagedThreadId;
                     try
                     {
                         string action = "复制";
@@ -167,56 +198,57 @@ public partial class MainWindow : Window
                         {
                             if (cfg.Conflict == "skip")
                             {
-                                skipped++; Interlocked.Add(ref done, f.Size);
+                                Interlocked.Increment(ref skipped);
+                                Interlocked.Add(ref doneBytes, f.Size);
+                                var df = Interlocked.Increment(ref doneFiles);
                                 Log($"跳过 {f.Src} → {dst}（已存在）");
-                                Report(done, total, null, null); continue;
+                                Dispatcher.UIThread.Post(() => SetOverall(df, totalFiles, Interlocked.Read(ref doneBytes), totalBytes));
+                                return ValueTask.CompletedTask;
                             }
                             if (cfg.Conflict == "rename") { dst = Copier.UniquePath(dst); action = "改名"; }
                             else action = "覆盖";
                         }
                         Log($"{action} {f.Src} → {dst}  ({Copier.Sz(f.Size)})");
-
                         var srcName = Path.GetFileName(f.Src);
+                        active[slot] = (srcName, f.Size, 0);
                         bool ok = Copier.CopyOne(f.Src, dst, n =>
                         {
-                            Interlocked.Add(ref done, n);
-                            var now = sw.Elapsed;
-                            if ((now - lastTick).TotalMilliseconds >= 200)
-                            {
-                                var speed = (done - lastBytes) / (now - lastTick).TotalSeconds;
-                                lastTick = now; lastBytes = done;
-                                Report(done, total, speed, srcName);
-                            }
-                        }, ct);
+                            Interlocked.Add(ref doneBytes, n);
+                            active.AddOrUpdate(slot,
+                                _ => (srcName, f.Size, n),
+                                (_, cur) => (cur.name, cur.size, cur.done + n));
+                        }, token);
+                        active.TryRemove(slot, out _);
                         if (ok)
                         {
-                            copied++;
+                            Interlocked.Increment(ref copied);
                             if (cfg.Verify) toVerify.Add((f.Src, dst, f.Size));
                         }
-                        else if (ct.IsCancellationRequested)
-                        {
-                            Log($"已取消 {f.Src}");
-                        }
+                        else if (token.IsCancellationRequested) Log($"已取消 {f.Src}");
                     }
-                    catch (Exception ex) { failed++; Log($"失败 {f.Src}: {ex.Message}"); }
-                    Report(done, total, null, null);
-                }
-            }, ct);
+                    catch (Exception ex) { Interlocked.Increment(ref failed); Log($"失败 {f.Src}: {ex.Message}"); active.TryRemove(slot, out _); }
+                    var df2 = Interlocked.Increment(ref doneFiles);
+                    Dispatcher.UIThread.Post(() => SetOverall(df2, totalFiles, Interlocked.Read(ref doneBytes), totalBytes));
+                    return ValueTask.CompletedTask;
+                });
 
+            speedTimer.Dispose();
             sw.Stop();
-            var avg = done / Math.Max(sw.Elapsed.TotalSeconds, 0.01);
-            Log($"复制完成：复制 {copied}，跳过 {skipped}，失败 {failed}，{Copier.Sz(done)} in {sw.Elapsed.TotalSeconds:0.0}s（{Copier.Sz(avg)}/s）");
+            var avg = doneBytes / Math.Max(sw.Elapsed.TotalSeconds, 0.01);
+            Dispatcher.UIThread.Post(() => { TbSpeed.Text = Copier.Sz(avg) + "/s"; SetCurrent(1, 1, "—"); });
+            Log($"复制完成：复制 {copied}，跳过 {skipped}，失败 {failed}，{Copier.Sz(doneBytes)} in {sw.Elapsed.TotalSeconds:0.0}s（{Copier.Sz(avg)}/s）");
 
             if (cfg.Verify && toVerify.Count > 0 && !ct.IsCancellationRequested)
             {
-                long vtotal = toVerify.Sum(x => x.size);
-                Log($"开始校验 {toVerify.Count} 个文件，共 {Copier.Sz(vtotal)}");
-                await Dispatcher.UIThread.InvokeAsync(() => { Pb.Maximum = Math.Max(1, vtotal); Pb.Value = 0; });
-                long vdone = 0; int vok = 0, vbad = 0;
+                var vlist = toVerify.ToList();
+                int vtotalFiles = vlist.Count;
+                Log($"开始校验 {vtotalFiles} 个文件");
+                await Dispatcher.UIThread.InvokeAsync(() => { SetOverall(0, vtotalFiles, 0, 1); SetCurrent(0, 1, "校验中"); });
+                int vdoneFiles = 0, vok = 0, vbad = 0;
                 var vsw = Stopwatch.StartNew();
                 await Task.Run(() =>
                 {
-                    foreach (var (src, dst, size) in toVerify)
+                    foreach (var (src, dst, size) in vlist)
                     {
                         if (ct.IsCancellationRequested) break;
                         try
@@ -227,8 +259,9 @@ public partial class MainWindow : Window
                             else { vbad++; failed++; Log($"校验失败 {dst}  src={a}  dst={b}"); try { File.Delete(dst); } catch { } }
                         }
                         catch (Exception ex) { vbad++; failed++; Log($"校验错误 {dst}: {ex.Message}"); }
-                        Interlocked.Add(ref vdone, size);
-                        Report(vdone, vtotal, null, Path.GetFileName(dst));
+                        var df = Interlocked.Increment(ref vdoneFiles);
+                        var name = Path.GetFileName(dst);
+                        Dispatcher.UIThread.Post(() => { SetOverall(df, vtotalFiles, df, vtotalFiles); SetCurrent(1, 1, name); });
                     }
                 }, ct);
                 vsw.Stop();
@@ -253,24 +286,31 @@ public partial class MainWindow : Window
         }
     }
 
-    void Report(long done, long total, double? speed, string? name)
+    void SetOverall(int doneFiles, int totalFiles, long doneBytes, long totalBytes)
     {
-        Dispatcher.UIThread.Post(() =>
-        {
-            Pb.Value = done;
-            var pct = 100.0 * done / Math.Max(1, total);
-            var over = speed is null
-                ? $"{pct:0.0}%  {Copier.Sz(done)} / {Copier.Sz(total)}"
-                : $"{pct:0.0}%  {Copier.Sz(done)} / {Copier.Sz(total)}   •   {Copier.Sz(speed.Value)}/s";
-            LbProgress.Text = over;
-            if (name is not null) LbStatus.Text = "正在复制  " + name;
-        });
+        PbOverall.Maximum = Math.Max(1, totalFiles);
+        PbOverall.Value = Math.Min(doneFiles, totalFiles);
+        var pct = 100.0 * doneFiles / Math.Max(1, totalFiles);
+        LbOverall.Text = $"总进度  {doneFiles} / {totalFiles}  ({pct:0.0}%)  {Copier.Sz(doneBytes)} / {Copier.Sz(totalBytes)}";
+        LbStatus.Text = doneFiles >= totalFiles ? "完成" : $"进行中  {doneFiles}/{totalFiles}";
     }
 
+    void SetCurrent(long done, long size, string name)
+    {
+        PbCurrent.Maximum = Math.Max(1, size);
+        PbCurrent.Value = Math.Min(done, size);
+        var pct = 100.0 * done / Math.Max(1, size);
+        LbCurrent.Text = $"当前  {pct:0.0}%   {name}";
+    }
+
+    readonly object _logLock = new();
     void Log(string s)
     {
         var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {s}";
-        try { Directory.CreateDirectory(Config.LogDir); File.AppendAllText(Config.LogPath, line + Environment.NewLine); } catch { }
+        lock (_logLock)
+        {
+            try { Directory.CreateDirectory(Config.LogDir); File.AppendAllText(Config.LogPath, line + Environment.NewLine); } catch { }
+        }
         Dispatcher.UIThread.Post(() =>
         {
             const int cap = 200_000;

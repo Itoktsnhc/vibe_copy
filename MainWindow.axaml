@@ -107,7 +107,9 @@
 
                     <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
                         <CheckBox x:Name="CbVerify" Content="复制后校验 (SHA1)" VerticalAlignment="Center" Margin="0,0,20,0"/>
-                        <CheckBox x:Name="CbAutoEject" Content="完成后自动弹出" VerticalAlignment="Center"/>
+                        <CheckBox x:Name="CbAutoEject" Content="完成后自动弹出" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                        <TextBlock Classes="muted" Text="并发" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="NudConcurrency" Width="70" Height="24" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>
@@ -115,18 +117,35 @@
 
         <!-- 传输 -->
         <Border Grid.Row="1" Classes="card">
-            <Grid ColumnDefinitions="Auto,8,Auto,12,*" RowDefinitions="Auto,Auto">
-                <Button Grid.Row="0" Grid.Column="0" Classes="primary" Content="▶ 开始复制" x:Name="BtnStart" Click="BtnStart_Click"/>
-                <Button Grid.Row="0" Grid.Column="2" Content="■ 取消" x:Name="BtnCancel" IsEnabled="False" Click="BtnCancel_Click"/>
-                <Grid Grid.Row="0" Grid.Column="4" Height="22">
-                    <ProgressBar x:Name="Pb" Minimum="0" Maximum="1" Value="0"
-                                 MinHeight="22" Height="22"
+            <Grid ColumnDefinitions="Auto,8,Auto,12,*,10,120" RowDefinitions="22,4,22,Auto">
+                <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Classes="primary" Content="▶ 开始复制" x:Name="BtnStart" Height="48" VerticalAlignment="Center" Click="BtnStart_Click"/>
+                <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="2" Content="■ 取消" x:Name="BtnCancel" Height="48" VerticalAlignment="Center" IsEnabled="False" Click="BtnCancel_Click"/>
+
+                <Grid Grid.Row="0" Grid.Column="4">
+                    <ProgressBar x:Name="PbOverall" Minimum="0" Maximum="1" Value="0"
                                  Background="#E8ECF2" BorderBrush="#E0E4EB" Foreground="#007ACC"/>
-                    <TextBlock x:Name="LbProgress" Text="0.0%  就绪"
+                    <TextBlock x:Name="LbOverall" Text="总进度  0 / 0"
                                HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </Grid>
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" x:Name="LbStatus"
-                           Text="就绪" Foreground="#78808C" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+
+                <Grid Grid.Row="2" Grid.Column="4">
+                    <ProgressBar x:Name="PbCurrent" Minimum="0" Maximum="1" Value="0"
+                                 Background="#E8ECF2" BorderBrush="#E0E4EB" Foreground="#4CAF50"/>
+                    <TextBlock x:Name="LbCurrent" Text="当前  —"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                </Grid>
+
+                <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="6"
+                        Background="#181C22" CornerRadius="3">
+                    <TextBlock x:Name="TbSpeed" Text="0 B/s"
+                               FontWeight="Bold" FontSize="14"
+                               Foreground="#4CAF50"
+                               FontFamily="Cascadia Mono,Consolas"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="7" x:Name="LbStatus"
+                           Text="就绪" Foreground="#78808C" TextTrimming="CharacterEllipsis" Margin="0,6,0,0"/>
             </Grid>
         </Border>
 

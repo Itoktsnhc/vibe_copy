@@ -17,6 +17,7 @@ public class Config
     public string Conflict { get; set; } = "rename";    // skip | rename | overwrite
     public bool Verify { get; set; } = false;
     public bool AutoEject { get; set; } = true;
+    public int Concurrency { get; set; } = 2;
 
     static string Path_ => Path.Combine(AppContext.BaseDirectory, "vibecopy.config.json");
     public static string LogDir => Path.Combine(AppContext.BaseDirectory, "logs");
@@ -72,7 +73,8 @@ public static class Shell
         var path = $@"\\.\{letter}:";
         try
         {
-            using var h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
+            // access=0 gets a query-only handle — enough for LOCK/DISMOUNT/EJECT and doesn't need admin.
+            using var h = CreateFileW(path, 0,
                 FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
             if (h.IsInvalid) return (false, $"open failed ({System.Runtime.InteropServices.Marshal.GetLastWin32Error()})");
             if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out _, IntPtr.Zero))
