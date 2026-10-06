@@ -3,7 +3,7 @@
         xmlns:vm="clr-namespace:VibeCopy"
         x:Class="VibeCopy.MainWindow"
         x:DataType="vm:MainWindow"
-        Title="VibeCopy — 多卡一键归档"
+        Title="VibeCopy — 通用迁移整理"
         Width="1100" Height="720" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         FontFamily="Microsoft YaHei UI,Segoe UI" FontSize="12"
@@ -82,35 +82,56 @@
     <Grid Margin="10" RowDefinitions="Auto,Auto,2*,3*">
 
         <!-- 配置 -->
-        <Border Grid.Row="0" Classes="card">
+        <Border Grid.Row="0" Classes="card" x:Name="SettingsPanel">
             <StackPanel>
-                <TextBlock Text="归档设置" Classes="title"/>
-                <Grid ColumnDefinitions="96,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Text="迁移设置" Classes="title"/>
+                <Grid ColumnDefinitions="96,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="muted" Text="目标目录" Margin="0,2"/>
                     <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TbTarget" Margin="0,2,6,2"/>
                     <Button    Grid.Row="0" Grid.Column="2" Content="浏览…" Width="72" Margin="0,2" Click="BtnBrowse_Click"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted" Text="扩展名" Margin="0,2"/>
-                    <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="TbExts" Margin="0,2"/>
+                    <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="TbExts" Margin="0,2"
+                               Watermark="留空 = 所有文件；例如 .jpg,.mp4,.pdf"
+                               ToolTip.Tip="逗号分隔扩展名；留空表示迁移所有文件"/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="muted" Text="扫描子目录" Margin="0,2"/>
                     <TextBox   Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="TbDirs" Margin="0,2"
-                               ToolTip.Tip="留空=全盘扫描"/>
+                               Watermark="留空 = 全部内容；例如 DCIM,PRIVATE"
+                               ToolTip.Tip="来源目录下的相对扫描子目录，逗号分隔；留空表示扫描全部内容"/>
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="muted" Text="子文件夹规则" Margin="0,2"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="muted" Text="日期依据" Margin="0,2"/>
                     <Grid      Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,2"
                                ColumnDefinitions="*,10,Auto,6,*">
-                        <ComboBox  Grid.Column="0" x:Name="CbTime" HorizontalAlignment="Stretch"/>
+                        <ComboBox  Grid.Column="0" x:Name="CbTime" HorizontalAlignment="Stretch"
+                                   ToolTip.Tip="creation = 文件创建时间；modified = 最后修改时间"/>
                         <TextBlock Grid.Column="2" Classes="muted" Text="同名冲突"/>
                         <ComboBox  Grid.Column="4" x:Name="CbConflict" HorizontalAlignment="Stretch"/>
                     </Grid>
 
                     <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0">
                         <CheckBox x:Name="CbVerify" Content="复制后校验 (SHA1)" VerticalAlignment="Center" Margin="0,0,20,0"/>
-                        <CheckBox x:Name="CbAutoEject" Content="完成后自动弹出" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                        <CheckBox x:Name="CbAutoEject" Content="完成后弹出勾选的移动盘" VerticalAlignment="Center" Margin="0,0,20,0"/>
                         <TextBlock Classes="muted" Text="并发" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="NudConcurrency" Width="70" Height="24" VerticalAlignment="Center"/>
                     </StackPanel>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="muted" Text="目标子目录" Margin="0,2"/>
+                    <Grid Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,8,Auto,6,160">
+                        <TextBox Grid.Column="0" x:Name="TbFolderPattern" Margin="0,2" Watermark="yyyy/MM/dd"
+                                 ToolTip.Tip="日期格式，例如 yyyy、yyyy/MM、yyyy/MM/dd；使用 / 创建多级目录"/>
+                        <TextBlock Grid.Column="2" Classes="muted" Text="常用规则"/>
+                        <ComboBox Grid.Column="4" x:Name="CbFolderPreset" HorizontalAlignment="Stretch" Margin="0,2"/>
+                    </Grid>
+                    <TextBlock Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" x:Name="LbFolderPreview"
+                               Classes="muted" Margin="0,2" TextTrimming="CharacterEllipsis"/>
+                </Grid>
+                <Grid ColumnDefinitions="96,*,Auto" Margin="0,4,0,0">
+                    <TextBlock Grid.Column="0" Classes="muted" Text="来源目录" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                    <TextBox Grid.Column="1" x:Name="TbSources" MinHeight="54" Height="54"
+                             AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top"
+                             Watermark="每行一个目录；可与下方移动磁盘同时使用"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,6,0"/>
+                    <Button Grid.Column="2" Content="添加目录" Width="72" VerticalAlignment="Top" Click="BtnBrowseSources_Click"/>
                 </Grid>
             </StackPanel>
         </Border>
@@ -150,7 +171,7 @@
         </Border>
 
         <!-- 盘 -->
-        <Border Grid.Row="2" Classes="card">
+        <Border Grid.Row="2" Classes="card" x:Name="DrivesPanel">
             <Grid RowDefinitions="Auto,Auto,*">
                 <Grid Grid.Row="0" Margin="0,0,0,4">
                     <TextBlock Text="可移动盘" Classes="title" Margin="0"/>

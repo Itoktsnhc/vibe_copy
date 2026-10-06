@@ -1,44 +1,62 @@
 # VibeCopy
 
-Windows GUI 工具：相机 / 读卡器插入后，把多个可移动盘的照片、视频一次性归档到目标目录下的 `yyyy-MM-dd` 子文件夹，完成后一键弹出。
+Windows GUI 通用迁移整理工具：从多个来源目录批量扫描文件，按日期规则整理到目标目录；可直接勾选可移动盘，也可以输入任意本地目录、网络映射盘或其他磁盘路径。
 
-- 单文件 exe（约 19 MB，无需安装 .NET）
-- 品牌无关：默认覆盖 Sony / Canon / Nikon / Fuji / Panasonic RAW + 常见视频
-- 修改设置即时保存到 exe 同目录的 `vibecopy.config.json`
-- 复制细节追加到 `vibecopy.log`
-- 可选 SHA1 校验（复制全部完成后统一校验，避免读写混合）
+- 单文件 exe，约 42 MB，无需安装 .NET（保留 Windows 弹出功能所需的 COM 支持）
+- 配置自动保存到 exe 同目录的 `vibecopy.config.json`
+- 详细日志写入 `logs` 目录
+- 可选 SHA1 校验，复制完成后统一检查
 
 ## 系统要求
 
 - **Windows 10 版本 1607 (x64)** 或更高
-- Windows 11 / Windows Server 2016+ 均可
-
-（基于 .NET 8 + Avalonia，最低系统要求即 .NET 8 官方要求。）
+- Windows 11 / Windows Server 2016+
 
 ## 使用
 
 1. 从 [Releases](../../releases) 下载 `VibeCopy.exe`
-2. 双击运行（首次运行会在 exe 同目录生成 `vibecopy.config.json` / `vibecopy.log`）
-3. 插入相机或 SD 卡
-4. 选目标目录 → 勾选盘 → 「开始复制」
+2. 启动后，在“来源目录”中每行填写一个目录，或勾选下方的可移动盘
+3. 选择目标目录，设置目标子目录规则
+4. 点击“开始复制”
 
-设置项：
-- **扩展名**：逗号分隔，加机型直接改字符串
-- **扫描子目录**：默认 `DCIM,PRIVATE,M4ROOT,XDROOT,MISC,AVCHD,CLIP,SSP`；留空则全盘扫
-- **子文件夹规则**：按 `creation`（Windows 文件创建时间）或 `modified`（写入时间）分日期
+整理以复制方式进行，保留来源文件。所有匹配文件会归入日期目录，原来的子目录层级不会保留。
+
+## 主要选项
+
+- **来源目录**：每行一个目录；可与可移动盘同时使用。留空时仍可使用下方勾选的可移动盘
+- **扩展名**：逗号分隔的扩展名；留空表示迁移所有文件
+- **扫描子目录**：相对于每个来源目录的子目录，逗号分隔；留空表示扫描全部内容
+- **目标子目录**：日期格式，例如 `yyyy`、`yyyy/MM`、`yyyy/MM/dd`；使用 `/` 可创建多级目录
+- **时间字段**：按创建时间或修改时间生成目录
 - **同名冲突**：`skip` / `rename` / `overwrite`
-- **复制后校验 (SHA1)**：额外一遍读校验，慢一倍
-- **完成后自动弹出**：无错时安全弹出所有勾选盘
+- **复制后校验 (SHA1)**：复制完成后逐个校验
+- **完成后自动弹出**：对勾选的可移动盘执行弹出
+
+已使用旧版本的用户，原配置里的扩展名和扫描子目录会保留；清空这两个输入框即可扫描所有文件和目录。可移动盘默认不勾选，按需选择。
+
+选择 `yyyy/MM/dd` 后，例如日期为 2026 年 10 月 6 日的文件会保存到 `目标目录\2026\10\06\文件名`。也可使用原有的 `yyyy-MM-dd` 单层目录格式。
+
+重叠来源中的同一文件只复制一次；目标位于来源内部时会从扫描中排除。目录链接不会被递归跟随，访问失败会记入日志。自动弹出仅在无错误时执行，且跳过目标所在的移动盘。
+
+弹出先使用 Windows 设备接口，失败后回退到资源管理器的“弹出”功能。日志会保留错误码及说明；仅提交请求但介质仍可访问时，会显示“未确认弹出”。若提示设备占用，请关闭正在访问该盘的程序和文件窗口后重试。弹出期间会禁用重复点击，成功的盘会取消勾选。
 
 ## 安全性
 
-每个 Release 的 `VibeCopy.exe` 由 GitHub Actions 在 `windows-latest` 上原地构建，SHA256 记录在 Release 说明里可自行核对。源码开放，可自行 `dotnet publish` 复现产物。
+每个 Release 的 `VibeCopy.exe` 由 GitHub Actions 在 `windows-latest` 上构建，SHA256 记录在 Release 说明中供核对。源码开放，可自行 `dotnet publish` 复现产物。
 
 ## 从源码构建
 
-需要 [.NET 8 SDK](https://dotnet.microsoft.com/download)（Windows）。
+需要 [.NET 8 SDK](https://dotnet.microsoft.com/download)。Windows 下运行：
 
 ```powershell
-dotnet run                  # 开发运行
-./publish.ps1               # 发布单文件到 publish/VibeCopy.exe
+dotnet run
+./publish.ps1
+```
+
+核心回归检查（PowerShell 7）：
+
+```powershell
+dotnet build
+./tests/CoreChecks.ps1
+./tests/EjectChecks.ps1      # 只读接口检查，不会弹出真实设备
 ```

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 Remove-Item -Recurse -Force publish -ErrorAction SilentlyContinue
 dotnet publish -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true -p:PublishTrimmed=true `
+    -p:PublishSingleFile=true -p:PublishTrimmed=false `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -o publish
